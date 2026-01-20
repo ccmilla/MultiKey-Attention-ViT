@@ -348,7 +348,7 @@ class ViTLayerReduction(nn.Module):
 # Given the model name, class count, and free/fine-tune preference, and it hands back
 # the right neural network configured for training
 # ============      
-def select_image_model(model_name="resnet18tv", n_classes=5, freeze_backbone=False, pretrained=False):
+def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backbone=False, pretrained=False):
     if model_name == "resnet18tv":
         model = torchvision.models.resnet18(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, n_classes)
