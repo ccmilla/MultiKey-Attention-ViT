@@ -1,5 +1,6 @@
-my_logs/
-__pycache__/
-data/
-runs/
-lightning_logs/
+/my_logs
+/__pycache__
+/data
+/runs
+/lightning_logs
+/older_code

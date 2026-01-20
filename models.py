@@ -302,7 +302,7 @@ class ViTLayerReduction(nn.Module):
     def __init__(self, num_blocks_to_keep, patch_size=16, num_classes=101, img_size=224):
         super().__init__()
         full_model = create_model(
-            "vit_small_patch16_224",
+            "VitLayerReduction",
             pretrained=False,
             num_classes=num_classes,
             drop_rate=0.3,  #changing back to original
@@ -348,7 +348,8 @@ class ViTLayerReduction(nn.Module):
 # Given the model name, class count, and free/fine-tune preference, and it hands back
 # the right neural network configured for training
 # ============      
-def select_image_model(model_name="resnet18tv", n_classes=5, freeze_backbone=False, pretrained=False):
+def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backbone=False, pretrained=False):
+    print("Model Name: ", model_name)
     if model_name == "resnet18tv":
         model = torchvision.models.resnet18(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, n_classes)

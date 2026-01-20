@@ -137,7 +137,7 @@ if __name__ == "__main__":
 
     dataset_dir = "data/"
     model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", "resnet18timm"]  # Add more model names as needed
-    model_name = model_names[1]
+    model_name = model_names[0]
     pretrained = False
     b = 64
     width = 224
@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     model = LitNetwork(model_name=model_name, pretrained=pretrained)
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc', save_top_k=1, mode='max')
-    logger = pl_loggers.TensorBoardLogger(save_dir="my_logs",name=model_name)
+    logger = pl_loggers.TensorBoardLogger(save_dir="jan_logs",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
