@@ -20,7 +20,7 @@ from models import select_image_model
 class LitNetwork(pl.LightningModule):
     #Residual Network Deep Residual Learning for Image Recognition with 18 layers.
     #Convultional, pooling, fully connected, and skip connection layers.
-    def __init__(self, model_name="resnet18", freeze_backbone=False, pretrained=False):
+    def __init__(self, model_name="ViTLayerReduction", freeze_backbone=False, pretrained=False):
         super(LitNetwork, self).__init__()
         n_classes = 101 #Change num_classes to the number of classification categories in your dataset
 
@@ -37,11 +37,6 @@ class LitNetwork(pl.LightningModule):
     def forward(self, x):
         x = self.model(x)
         return x
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
-        return optimizer
-
     def training_step(self, data, batch_idx):
         im, label = data[0], data[1]
         x,y = data
@@ -92,14 +87,6 @@ class LitNetwork(pl.LightningModule):
         return None
     
     def configure_optimizers(self):
-        lr = 1e-5
-        base_lr = 1e-5
-        weight_decay=0.5
-        peak_lr = 1e-5
-        num_epochs = 60
-        warmup_epochs = 15
-        rampup_epochs = 15
-        final_lr_fraction = 0.1
 
         optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=weight_decay)
 
