@@ -4,3 +4,5 @@ data/
 runs/
 logs_VitLayer/
 lightning_logs/
+jan_logs/
+logs_VitLayer/
