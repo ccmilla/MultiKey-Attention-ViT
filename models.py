@@ -302,7 +302,7 @@ class ViTLayerReduction(nn.Module):
     def __init__(self, num_blocks_to_keep, patch_size=16, num_classes=101, img_size=224):
         super().__init__()
         full_model = create_model(
-            "ViTLayerReduction",
+            "vit_small_patch16_224", #this has to be a valid timm model name
             pretrained=False,
             num_classes=num_classes,
             drop_rate=0.3,  #changing back to original

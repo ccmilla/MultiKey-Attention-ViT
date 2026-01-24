@@ -3,12 +3,12 @@ import torch.nn as nn
 import torchmetrics
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import torchvision
-import timm
+#import timm
 import pandas as pd
 import math
-
+from pytorch_lightning.callbacks import LearningRateMonitor
 from models import select_image_model
 
 #==========
@@ -20,8 +20,27 @@ from models import select_image_model
 class LitNetwork(pl.LightningModule):
     #Residual Network Deep Residual Learning for Image Recognition with 18 layers.
     #Convultional, pooling, fully connected, and skip connection layers.
-    def __init__(self, model_name="ViTLayerReduction", freeze_backbone=False, pretrained=False):
+    def __init__(self, model_name, 
+                       freeze_backbone=False, 
+                       pretrained=True, #hopefully this will increase my accuracy
+                       lr=1e-4,
+                       base_lr=1e-6,
+                       peak_lr =1e-4,
+                       weight_decay=1e-2, # from 0.5
+                       num_epochs=60,
+                       warmup_epochs=15,
+                       rampup_epochs=15,
+                       final_lr_fraction=0.1
+                ):
         super(LitNetwork, self).__init__()
+        #logging the hyperparameters on each run.
+        self.save_hyperparameters()
+
+        # scale warmup/rampup with num_epochs
+        h = self.hparams
+        h.warmup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
+        h.rampup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
+
         n_classes = 101 #Change num_classes to the number of classification categories in your dataset
 
         self.model = select_image_model(model_name=model_name, n_classes=n_classes, freeze_backbone=freeze_backbone, pretrained=pretrained)
@@ -38,15 +57,19 @@ class LitNetwork(pl.LightningModule):
         x = self.model(x)
         return x
     def training_step(self, data, batch_idx):
-        im, label = data[0], data[1]
-        x,y = data
-        logits = self(x)
-        outs = self.forward(im)
-        loss = self.loss_func(outs, label)
-        acc = (logits.argmax(dim=1) == y).float().mean()
+        # im, label = data[0], data[1] doing forward pass twice
+        im, label = data
+        # x,y = data
+        #logits = self(x)
+        logits = self(im)
+        #outs = self.forward(im) this was the second time.
+        # loss = self.loss_func(outs, label)
+        loss = self.loss_func(logits, label)
+        # acc = (logits.argmax(dim=1) == y).float().mean()
+        acc = (logits.argmax(dim=1) == label).float().mean()
 
-        self.log("train_loss",loss,batch_size=1,sync_dist=True,on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train_acc", acc, prog_bar=True, on_step=True, on_epoch=True)
+        self.log("train_loss",loss,sync_dist=True,on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_acc", acc, prog_bar=True, on_step=False, on_epoch=True)
         
         # Log LR
         optimizer = self.optimizers()
@@ -87,28 +110,50 @@ class LitNetwork(pl.LightningModule):
         return None
     
     def configure_optimizers(self):
-
-        optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=weight_decay)
-
+        # just making this simpler
+        h = self.hparams
+        #optimizer = torch.optim.AdamW(self.parameters(), lr=h.peak_lr, weight_decay=h.weight_decay)
+        #let's remove lr_lambda since that's giving me so much trouble
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4, weight_decay=1e-2)
+        # going back to steps
+        total_steps = self.trainer.estimated_stepping_batches
+        warmup_steps = int(0.1 * total_steps)
+        rampup_steps = int(0.1 * total_steps)
+        decay_steps = total_steps - warmup_steps - rampup_steps
         def lr_lambda(step):
             #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
-            steps_per_epoch = self.trainer.estimated_stepping_batches / num_epochs
-            epoch_step = step / steps_per_epoch
+            # steps_per_epoch = self.trainer.estimated_stepping_batches / h.num_epochs
+            # epoch_step = step / steps_per_epoch
 
-            if epoch_step < warmup_epochs:
-                return base_lr / peak_lr
-            elif epoch_step < warmup_epochs + rampup_epochs:
-                progress = (epoch_step - warmup_epochs) / rampup_epochs
-                lr = base_lr + progress * (peak_lr - base_lr)
-                return lr / peak_lr
+            if step < warmup_steps:
+                # return h.base_lr / h.peak_lr this is flat
+                # lr = h.base_lr + (epoch_step / h.warmup_epochs) * (h.peak_lr - h.base_lr)
+                # return lr / h.peak_lr
+                #return (h.base_lr + (step/warmup_steps) * h.peak_lr - h.base_lr) /h.peak_lr
+                #latest AI suggestion
+                # progress = step / max(1, warmup_steps)
+                # lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
+                # return lr / h.peak_lr
+                # now AI is telling me that is where my random guessing is happening.  So here goes:
+                return h.base_lr + (step / warmup_steps)*(h.peak_lr - h.base_lr)/h.peak_lr
+
+            elif step < warmup_steps +rampup_steps:
+                # progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
+                # lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
+                # return lr / h.peak_lr
+                return 1.0 # stay at peak
             else:
-                decay_progress = (epoch_step - warmup_epochs - rampup_epochs) / max(1, num_epochs - warmup_epochs - rampup_epochs)
-                cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-                lr = final_lr_fraction * peak_lr + (1 - final_lr_fraction) * peak_lr * cosine_decay
-                return lr / peak_lr
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
+                #decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
+                decay_step = step - warmup_steps - rampup_steps
+                progress = decay_step/max(1,decay_steps)
+                cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+                lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
+                return lr / h.peak_lr
+        # not even using this lr_scheduler
+        # scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        # return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
+        # now I will just return the optimizer
+        return optimizer
 
 #==========
 # main training script
@@ -125,7 +170,8 @@ if __name__ == "__main__":
     dataset_dir = "data/"
     model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", "resnet18timm"]  # Add more model names as needed
     model_name = model_names[0]
-    pretrained = False
+    #pretrained = False
+    pretrained = True # Hopefully this will increase my accuracy
     b = 64
     width = 224
     height = 224
@@ -154,7 +200,9 @@ if __name__ == "__main__":
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
     device = "gpu"
     torch.set_float32_matmul_precision('medium')
-    trainer = pl.Trainer(max_epochs=30, accelerator=device, callbacks=[checkpoint], logger=logger)
+    #adding Learning Rate Monitor to trainer
+    lr_monitor = LearningRateMonitor(logging_interval='step')
+    trainer = pl.Trainer(max_epochs=60, accelerator=device, callbacks=[checkpoint, lr_monitor], logger=logger)#need to match max to num_epochs
     trainer.fit(model,train_loader,val_loader)
     
     trainer.test(ckpt_path="best", dataloaders=test_loader)
