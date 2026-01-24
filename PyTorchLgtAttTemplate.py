@@ -27,7 +27,7 @@ class LitNetwork(pl.LightningModule):
                  lr=1e-4,
                  base_lr=1e-6,
                  peak_lr =1e-4,
-                 weight_decay=0.5,
+                 weight_decay=0.01, #changing from .5 to 0.01
                  num_epochs=120,
                  warmup_epochs=15,
                  rampup_epochs=15,
@@ -209,7 +209,14 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_dataset,batch_size=b)
 
     #added lr, increased num_epochs to 120 and made sure freeze_backbone is false and pretrain is true.
-    model = LitNetwork(model_name=model_name, pretrained=True, freeze_backbone=False, lr=2e-4, num_epochs=120)
+    model = LitNetwork(
+                model_name=model_name,
+                pretrained=True,
+                freeze_backbone=False,
+                lr=2e-4, #changing this from 2e-4 to 1e-4
+                weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
+                num_epochs=120
+                )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
     logger = pl_loggers.TensorBoardLogger(save_dir="logs_VitLayer",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
