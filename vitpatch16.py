@@ -8,6 +8,7 @@ from torchvision.datasets import Food101
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning import loggers as pl_loggers
 from timm import create_model
 
 #================
@@ -34,7 +35,7 @@ class Food101DataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
         self.train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.8, 1,0)),
+            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
             transforms.RandomHorizontalFlip(),
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             transforms.ToTensor(),
@@ -122,7 +123,7 @@ Loss functions like CrossEntropy expects logits
 '''
 class LitViT(pl.LightningModule):
     def __init__(self, num_classes=101, base_lr=1e-5, peak_lr=1e-4, final_lr_fraction=0.1,
-                 num_epochs=60, warmup_epochs=15, ramup_epochs=15, weight_decay=0.5):
+                 num_epochs=60, warmup_epochs=15, rampup_epochs=15, weight_decay=0.5):
         super().__init__()
         self.save_hyperparameters()
         self.model = VitLayerReduction(num_blocks=10, num_classes=num_classes)
@@ -134,8 +135,8 @@ class LitViT(pl.LightningModule):
     
     def on_train_epoch_end(self):
         duration = time.time() - self.epoch_start_time
-        train_loss = self.trainer.callback_metrics.get("train_loss_epoch")
-        train_acc = self.trainer.callback_metrics.get("train_acc_epoch")
+        train_loss = self.trainer.callback_metrics.get("train_loss")
+        train_acc = self.trainer.callback_metrics.get("train_acc")
         val_loss = self.trainer.callback_metrics.get("val_loss")
         val_acc = self.trainer.callback_metrics.get("val_acc")
         #Epoch number start at 1
@@ -173,26 +174,60 @@ class LitViT(pl.LightningModule):
         self.log("val_acc", acc, prog_bar=True, on_step=True, on_epoch=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr = self.hparams.peak_lr, weight_decay=self.hparams.weight_decay)
+        optimizer = torch.optim.AdamW(
+                                      self.parameters(), 
+                                      lr = self.hparams.peak_lr, 
+                                      weight_decay=self.hparams.weight_decay
+                                      )
 
         def lr_lambda(step):
             steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
             epoch_step = step / steps_per_epoch
 
+            # the following code keeps the LR constant during warmup instead of increasing it.
+            # if epoch_step < self.hparams.warmup_epochs:
+            #     return self.hparams.base_lr / self.hparams.peak_lr
+            # elif epoch_step < self.hparams.warmup_epochs + self.hparams.rampup_epochs:
+            #     progress = (epoch_step - self.hparams.warmup_epochs)/self.hparams.rampup_epochs
+            #     lr = self.hparams.base_lr + progress * (self.hparams.peak_lr - self.hparams.base_lr)
+            #     return lr / self.hparams.peak_lr
+
+            # === Warmup ====
             if epoch_step < self.hparams.warmup_epochs:
-                return self.hparams.base_lr / self.hparams.peak_lr
-            elif epoch_step < self.hparams.warmup_epochs + self.hparams.rampup_epochs:
-                progress = (epoch_step - self.hparams.warmup_epochs)/self.hparams.rampup_epochs
+                progress = epoch_step / self.hparams.warmup_epochs
                 lr = self.hparams.base_lr + progress * (self.hparams.peak_lr - self.hparams.base_lr)
-                return lr / self.hparams.peak_lr
+            # == Ramp == (hold peak)
+            elif epoch_step < self.hparams.warmup_epochs + self.hparams.rampup_epochs:
+                lr = self.hparams.peak_lr
+            # == Cosine decay ==
             else:
-                decay_progress = (epoch_step - self.hparams.warmup_epochs - self.hparams.rampup_epochs) / max(1, self.hparams.warmup_epochs - self.hparams.rampup_epochs)
+                decay_epochs = (
+                    self.hparams.num_epochs
+                    -self.hparams.warmup_epochs
+                    -self.hparams.rampup_epochs
+                )
+                decay_progress = (epoch_step 
+                                  - self.hparams.warmup_epochs 
+                                  - self.hparams.rampup_epochs
+                                  ) / max(1, decay_epochs)
+                # if training runs longer than planned, decay_progress can exceed 1.
+                decay_progress = min(decay_progress, 1.0)
                 cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
                 lr = self.hparams.final_lr_fraction * self.hparams.peak_lr + (1 - self.hparams.final_lr_fraction) * self.hparams.peak_lr * cosine_decay
-                return lr / self.hparams.peak_lr
+
+            return lr / self.hparams.peak_lr
             
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step" }}
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+                                                        optimizer, 
+                                                        lr_lambda=lr_lambda
+                                                    )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step" 
+                }
+            }
     
 ''' ^^ Lightning Boilerplate ^^ 
      Lightning wraps training boilerplate so you write only the core logic.  LitViT wraps the model and stores configuration
@@ -229,15 +264,20 @@ if __name__ == "__main__":
         filename="best-vit-{epoch:02d}-{val_acc:.4f}"
     )
 
+    logger = pl_loggers.TensorBoardLogger(save_dir="mine",name="vit_small_patch16_224")
+    #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
+    device = "gpu"
+    torch.set_float32_matmul_precision('medium')
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1 if torch.cuda.is_available() else None,
         precision=16,
         callbacks=[checkpoint_callback],
+        logger=logger,
         log_every_n_steps=50
     )
-
+    # changing the parameters
     trainer.fit(model, datamodule=data_module)
 
     print(f"Best model saved at: {checkpoint_callback.best_model_path}")

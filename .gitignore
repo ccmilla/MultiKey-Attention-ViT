@@ -2,4 +2,9 @@ my_logs/
 __pycache__/
 data/
 runs/
+logs_VitLayer/
 lightning_logs/
+jan_logs/
+logs_VitLayer/
+logs_overfit_test/
+baseline_comparison/

@@ -1,0 +1,93 @@
+============================================================
+MODEL ARCHITECTURE DIAGNOSTIC
+============================================================
+
+Creating model: ViTLayerReduction
+Number of classes: 101
+Block 0: Custom attention injected.
+Block 1: Custom attention injected.
+Block 2: Custom attention injected.
+Block 3: Custom attention injected.
+Block 4: Custom attention injected.
+Block 5: Custom attention injected.
+✓ Model created successfully
+
+============================================================
+MODEL STRUCTURE
+============================================================
+Model type: ViTLayerReduction
+Total parameters: 14,605,925
+Trainable parameters: 14,605,925
+✓ 14,605,925 trainable parameters
+
+Number of transformer blocks: 6
+Block types:
+  Block 0: CustomAttentionMultipleFiveSpatial
+  Block 1: CustomAttentionMultipleFiveSpatial
+  Block 2: CustomAttentionMultipleFiveSpatial
+  Block 3: CustomAttentionMultipleFiveSpatial
+  Block 4: CustomAttentionMultipleFiveSpatial
+  Block 5: CustomAttentionMultipleFiveSpatial
+
+============================================================
+FORWARD PASS TEST
+============================================================
+Input shape: torch.Size([4, 3, 224, 224])
+✓ Forward pass successful
+Output shape: torch.Size([4, 101])
+✓ Output shape matches number of classes (101)
+
+============================================================
+OUTPUT STATISTICS
+============================================================
+Output min: -0.890
+Output max: 1.370
+Output mean: 0.035
+Output std: 0.372
+
+After softmax:
+Probability min: 0.003615
+Probability max: 0.033884
+Sum of probabilities (should be ~1.0): 1.000000
+
+Predictions for batch: [7, 66, 28, 28]
+Unique predictions: 3 out of 4 samples
+
+============================================================
+TEST WITH REAL DATA
+============================================================
+Real batch - Images shape: torch.Size([8, 3, 224, 224])
+Real batch - Labels: [43, 32, 87, 96, 29, 34, 27, 24]
+Real batch - Label range: [24, 96]
+
+Model outputs shape: torch.Size([8, 101])
+Output range: [-1.213, 1.086]
+
+CrossEntropyLoss: 4.7666
+Expected loss for random guessing: 4.6151
+→ Loss is close to random guessing
+
+Batch accuracy: 0.00%
+Random guessing would be: 0.99%
+✗ CRITICAL: Accuracy is essentially 0% - something is very wrong
+
+Predictions: [85, 4, 42, 53, 42, 1, 53, 78]
+Unique predictions in batch: 6
+
+============================================================
+GRADIENT FLOW TEST
+============================================================
+Loss value: 4.3292
+✓ Gradients computed for 152 parameters
+Gradient norm range: [0.000000, 13.727166]
+Mean gradient norm: 1.538392
+
+============================================================
+DIAGNOSTIC COMPLETE
+============================================================
+
+Key findings to report:
+1. Does output shape match n_classes?
+2. Is loss close to random guessing (~4.6)?
+3. Are gradients flowing (not zero, not exploding)?
+4. Are all predictions the same class?

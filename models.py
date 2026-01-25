@@ -264,18 +264,60 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
         # print(q.shape)
         # print(kA.shape)
         # print((q @ kA.transpose(-2, -1)).softmax(dim=-1).shape)
+        
+        # ============================================================
+        # CRITICAL FIX: Apply masks BEFORE softmax using additive mask
+        # ============================================================
+        # Convert binary mask to additive mask: where mask == 0, add 149 (effectively -inf)
+        # This way softmax will make those positions ~0 probability
 
-        attn_ka = (q @ kA.transpose(-2, -1)).softmax(dim=-1) * self.left_mask
-        attn_kb = (q @ kB.transpose(-2, -1)).softmax(dim=-1) * self.right_mask
-        attn_kc = (q @ kC.transpose(-2, -1)).softmax(dim=-1) * self.up_mask
-        attn_kd = (q @ kD.transpose(-2, -1)).softmax(dim=-1) * self.down_mask
-        attn_ke = (q @ kE.transpose(-2, -1)).softmax(dim=-1) * self.identity_mask
+        def apply_mask(attn_scores, mask):
+            # mask shape: [1, 1, N, N] or [N, N]
+            # attn_scores shape: [B, num_heads, N, N]
+            # Where mask is 0, we want to prevent attention (set to -inf before softmax)
+            # Where mask is 1, we want to allow attention (leave as is)
+            mask_additive = (1.0 - mask) * -1e9 # 0->0, 1->-1e9, then invert
+            return attn_scores + mask_additive
+        
+        # Compute attention scores (before softmax)
+        attn_scores_ka = q @ kA.transpose(-2, -1)
+        attn_scores_kb = q @ kB.transpose(-2, -1)
+        attn_scores_kc = q @ kC.transpose(-2, -1)
+        attn_scores_kd = q @ kD.transpose(-2, -1)
+        attn_scores_ke = q @ kE.transpose(-2, -1)
+        
+        # Apply masks BEFORE softmax
+        attn_scores_ka = apply_mask(attn_scores_ka, self.left_mask)
+        attn_scores_kb = apply_mask(attn_scores_kb, self.right_mask)
+        attn_scores_kc = apply_mask(attn_scores_kc, self.up_mask)
+        attn_scores_kd = apply_mask(attn_scores_kd, self.down_mask)
+        attn_scores_ke = apply_mask(attn_scores_ke, self.identity_mask)
 
+        # Now apply softmax (gradients will flow through!)
+        attn_ka = attn_scores_ka.softmax(dim=-1)
+        attn_kb = attn_scores_kb.softmax(dim=-1)
+        attn_kc = attn_scores_kc.softmax(dim=-1)
+        attn_kd = attn_scores_kd.softmax(dim=-1)
+        attn_ke = attn_scores_ke.softmax(dim=-1)
+
+        '''The masks (left, right, up, down, and identity) are still being applied
+        to create directional attention patterns.  The only thing that changed is
+        how we apply them.  We are applying masks BEFORE softmax by adding -inf (gradients flow)
+        '''
+        # below is the old code
+        # attn_ka = (q @ kA.transpose(-2, -1)).softmax(dim=-1) * self.left_mask
+        # attn_kb = (q @ kB.transpose(-2, -1)).softmax(dim=-1) * self.right_mask
+        # attn_kc = (q @ kC.transpose(-2, -1)).softmax(dim=-1) * self.up_mask
+        # attn_kd = (q @ kD.transpose(-2, -1)).softmax(dim=-1) * self.down_mask
+        # attn_ke = (q @ kE.transpose(-2, -1)).softmax(dim=-1) * self.identity_mask
+
+        #apply attention values
         out_a = attn_ka @ v
         out_b = attn_kb @ v
         out_c = attn_kc @ v
         out_d = attn_kd @ v
         out_e = attn_ke @ v
+        #sum all outputs
         out = out_a + out_b + out_c + out_d + out_e
 
         out = out.transpose(1, 2).reshape(B, N, self.embed_dim)
@@ -299,11 +341,11 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
 class ViTLayerReduction(nn.Module):
     #added patch size and img_size
     #num_blocks_to_keep for consistency
-    def __init__(self, num_blocks_to_keep, patch_size=16, num_classes=101, img_size=224):
+    def __init__(self, num_blocks_to_keep, patch_size=16, num_classes=101, img_size=224, pretrained=True): #added pretrained
         super().__init__()
         full_model = create_model(
             "vit_small_patch16_224",
-            pretrained=False,
+            pretrained=pretrained,
             num_classes=num_classes,
             drop_rate=0.3,  #changing back to original
             drop_path_rate=0.1 #changing back to orginal
@@ -348,7 +390,7 @@ class ViTLayerReduction(nn.Module):
 # Given the model name, class count, and free/fine-tune preference, and it hands back
 # the right neural network configured for training
 # ============      
-def select_image_model(model_name="resnet18tv", n_classes=5, freeze_backbone=False, pretrained=False):
+def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backbone=False, pretrained=False):
     if model_name == "resnet18tv":
         model = torchvision.models.resnet18(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, n_classes)
@@ -367,7 +409,10 @@ def select_image_model(model_name="resnet18tv", n_classes=5, freeze_backbone=Fal
             for param in model.fc.parameters():
                 param.requires_grad = True
     elif model_name == "ViTLayerReduction":
-        model = ViTLayerReduction(num_blocks_to_keep=6, patch_size=16, img_size=224)
+        model = ViTLayerReduction(num_blocks_to_keep=12, # change from 10 to all 12
+                                  patch_size=16, 
+                                  img_size=224, 
+                                  pretrained=pretrained) #keeping 10 blocks and added pretrained
     else:
         model = timm.create_model(model_name, pretrained=pretrained, num_classes=n_classes)
 

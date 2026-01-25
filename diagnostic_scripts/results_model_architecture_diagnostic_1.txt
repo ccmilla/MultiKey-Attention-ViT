@@ -1,0 +1,184 @@
+============================================================
+MODEL STRUCTURE
+============================================================
+Model type: ViTLayerReduction
+Total parameters: 14,605,925
+Trainable parameters: 14,605,925
+✓ 14,605,925 trainable parameters
+
+Number of transformer blocks: 6
+Block types:
+  Block 0: CustomAttentionMultipleFiveSpatial
+  Block 1: CustomAttentionMultipleFiveSpatial
+  Block 2: CustomAttentionMultipleFiveSpatial
+  Block 3: CustomAttentionMultipleFiveSpatial
+  Block 4: CustomAttentionMultipleFiveSpatial
+  Block 5: CustomAttentionMultipleFiveSpatial
+
+============================================================
+FORWARD PASS TEST
+============================================================
+Input shape: torch.Size([4, 3, 224, 224])
+✓ Forward pass successful
+Output shape: torch.Size([4, 101])
+✓ Output shape matches number of classes (101)
+
+============================================================
+OUTPUT STATISTICS
+============================================================
+Output min: -0.947
+Output max: 0.990
+Output mean: -0.025
+Output std: 0.361
+
+After softmax:
+Probability min: 0.003688
+Probability max: 0.025600
+Sum of probabilities (should be ~1.0): 1.000000
+
+Predictions for batch: [43, 43, 43, 43]
+Unique predictions: 1 out of 4 samples
+⚠️  WARNING: All predictions are the same class - model is stuck
+
+============================================================
+TEST WITH REAL DATA
+============================================================
+Real batch - Images shape: torch.Size([8, 3, 224, 224])
+Real batch - Labels: [61, 44, 70, 38, 55, 2, 75, 36]
+Real batch - Label range: [2, 75]
+
+Model outputs shape: torch.Size([8, 101])
+Output range: [-0.947, 0.990]
+
+CrossEntropyLoss: 4.4622
+Expected loss for random guessing: 4.6151
+→ Loss is close to random guessing
+
+Batch accuracy: 0.00%
+Random guessing would be: 0.99%
+✗ CRITICAL: uracAccy is essentially 0% - something is very wrong
+
+Predictions: [43, 43, 43, 43, 43, 43, 43, 43]
+Unique predictions in batch: 1
+
+============================================================
+GRADIENT FLOW TEST
+============================================================
+Loss value: 5.1385
+⚠️  patch_embed.proj.weight: gradient is zero!
+⚠️  patch_embed.proj.bias: gradient is zero!
+⚠️  blocks.0.norm1.weight: gradient is zero!
+⚠️  blocks.0.norm1.bias: gradient is zero!
+⚠️  blocks.0.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.0.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.0.attn.proj.weight: gradient is zero!
+⚠️  blocks.1.norm1.weight: gradient is zero!
+⚠️  blocks.1.norm1.bias: gradient is zero!
+⚠️  blocks.1.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.1.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.1.attn.proj.weight: gradient is zero!
+⚠️  blocks.2.norm1.weight: gradient is zero!
+⚠️  blocks.2.norm1.bias: gradient is zero!
+⚠️  blocks.2.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.2.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.2.attn.proj.weight: gradient is zero!
+⚠️  blocks.3.norm1.weight: gradient is zero!
+⚠️  blocks.3.norm1.bias: gradient is zero!
+⚠️  blocks.3.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.3.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.3.attn.proj.weight: gradient is zero!
+⚠️  blocks.4.norm1.weight: gradient is zero!
+⚠️  blocks.4.norm1.bias: gradient is zero!
+⚠️  blocks.4.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.4.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.4.attn.proj.weight: gradient is zero!
+⚠️  blocks.5.norm1.weight: gradient is zero!
+⚠️  blocks.5.norm1.bias: gradient is zero!
+⚠️  blocks.5.attn.q_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.q_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.v_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.v_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.kA_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.kA_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.kB_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.kB_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.kC_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.kC_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.kD_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.kD_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.kE_linear.weight: gradient is zero!
+⚠️  blocks.5.attn.kE_linear.bias: gradient is zero!
+⚠️  blocks.5.attn.proj.weight: gradient is zero!
+✓ Gradients computed for 152 parameters
+Gradient norm range: [0.000000, 15.453991]
+Mean gradient norm: 1.139467
+
+============================================================
+DIAGNOSTIC COMPLETE
+============================================================
+
+Key findings to report:
+1. Does output shape match n_classes?
+2. Is loss close to random guessing (~4.6)?
+3. Are gradients flowing (not zero, not exploding)?
+4. Are all predictions the same class?
