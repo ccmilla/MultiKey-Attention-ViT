@@ -56,7 +56,7 @@ Expected loss for random guessing: 4.6151
 
 Batch accuracy: 0.00%
 Random guessing would be: 0.99%
-✗ CRITICAL: Accuracy is essentially 0% - something is very wrong
+✗ CRITICAL: uracAccy is essentially 0% - something is very wrong
 
 Predictions: [43, 43, 43, 43, 43, 43, 43, 43]
 Unique predictions in batch: 1

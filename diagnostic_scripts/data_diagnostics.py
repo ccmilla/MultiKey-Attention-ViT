@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import numpy as np
 
-dataset_dir = "data/"
+dataset_dir = "../data/"
 b = 64
 width = 224
 height = 224

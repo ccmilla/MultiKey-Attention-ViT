@@ -409,7 +409,10 @@ def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backb
             for param in model.fc.parameters():
                 param.requires_grad = True
     elif model_name == "ViTLayerReduction":
-        model = ViTLayerReduction(num_blocks_to_keep=10, patch_size=16, img_size=224, pretrained=pretrained) #keeping 10 blocks and added pretrained
+        model = ViTLayerReduction(num_blocks_to_keep=12, # change from 10 to all 12
+                                  patch_size=16, 
+                                  img_size=224, 
+                                  pretrained=pretrained) #keeping 10 blocks and added pretrained
     else:
         model = timm.create_model(model_name, pretrained=pretrained, num_classes=n_classes)
 

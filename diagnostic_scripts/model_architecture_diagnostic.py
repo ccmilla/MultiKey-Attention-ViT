@@ -121,7 +121,7 @@ try:
     import torchvision
     from torch.utils.data import DataLoader
     
-    dataset_dir = "data/"
+    dataset_dir = "../data/"
     transforms = torchvision.transforms.Compose([
         torchvision.transforms.RandomResizedCrop((224, 224)),
         torchvision.transforms.ToTensor(),

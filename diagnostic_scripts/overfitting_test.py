@@ -20,7 +20,7 @@ print("OVERFITTING TEST - Training on 100 samples")
 print("="*60)
 
 # Setup
-dataset_dir = "data/"
+dataset_dir = "../data/"
 b = 16  # Smaller batch for tiny dataset
 width = 224
 height = 224

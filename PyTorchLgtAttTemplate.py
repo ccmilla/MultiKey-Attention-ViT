@@ -29,8 +29,8 @@ class LitNetwork(pl.LightningModule):
                  peak_lr =1e-4,
                  weight_decay=0.01, #changing from .5 to 0.01
                  num_epochs=120,
-                 warmup_epochs=15,
-                 rampup_epochs=15,
+                 warmup_epochs=3,  # this depends on whether or not it is pretrained shall we do 3 for pretrained?
+                 rampup_epochs=5,   # recommended 5?
                  final_lr_fraction=0.1):
         super().__init__()
         #logging the hyperparameters on each run.
@@ -38,8 +38,9 @@ class LitNetwork(pl.LightningModule):
 
         # scale warmup/rampup with num_epochs
         h = self.hparams
-        h.warmup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
-        h.rampup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
+        #passing in warmup and rampup epochs
+        # h.warmup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
+        # h.rampup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
         
         n_classes = 101 #Change num_classes to the number of classification categories in dataset
 
@@ -198,11 +199,28 @@ if __name__ == "__main__":
         torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-    train_dataset = torchvision.datasets.Food101(root=dataset_dir, split='train', transform=transforms, download=True)
+    train_dataset = torchvision.datasets.Food101(
+                          root=dataset_dir, 
+                          split='train',
+                          transform=transforms,
+                          download=True)
+    test_dataset = torchvision.datasets.Food101(
+                          root=dataset_dir,
+                          split="test",
+                          transform=transforms,
+                          download=True 
+    )
 
-    train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.8), len(train_dataset) - int(len(train_dataset)*0.8)])
+    #train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.8), len(train_dataset) - int(len(train_dataset)*0.8)])
+    #train_dataset= torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.8), len(train_dataset) - int(len(train_dataset)*0.8)])
 
-    test_dataset = torchvision.datasets.Food101(root=dataset_dir, split='test', transform=transforms, download=True)
+    #test_dataset = torchvision.datasets.Food101(root=dataset_dir, split='test', transform=transforms, download=True)
+    # Split test into val + test (80/20 split of the test set)
+
+    val_dataset, test_dataset = torch.utils.data.random_split(
+                                                    test_dataset, 
+                                                    [int(len(test_dataset)*0.8), len(test_dataset) - int(len(test_dataset)*0.8)]
+                                                    )
 
     train_loader = DataLoader(train_dataset,batch_size=b,shuffle=True, num_workers=12, persistent_workers=True)
     val_loader = DataLoader(val_dataset,batch_size=b,shuffle=False, num_workers=12, persistent_workers=True)
@@ -213,8 +231,11 @@ if __name__ == "__main__":
                 model_name=model_name,
                 pretrained=True,
                 freeze_backbone=False,
-                lr=2e-4, #changing this from 2e-4 to 1e-4
+                lr=1e-4, #toggling between 2e-4 and 1e-4
+                peak_lr=1e-4, # this a good number?
                 weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
+                warmup_epochs=3, # passing this in shorter for pretrained
+                rampup_epochs=5, #also passing in smaller rampup
                 num_epochs=120
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
