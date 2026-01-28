@@ -10,67 +10,70 @@ import math
 import numpy as np
 from timm import create_model
 
+#===============
+# Model-specific hyperparameters
+#===============
+MODEL_CONFIGS = {
+    "VitLayerReduction": {
+        "peak_lr": 1e-4,
+        "base_lr": 1e-6,
+        "weight_decay": 0.01,
+        "warmup_epochs": 3,
+        "rampup_epochs": 5,
+        "final_lr_fraction": 0.1,
+        "description": "Custom ViT with spatial attention - conservative LR"
+    },
+    "vit_small_patch16_224": {
+        "peak_lr": 3e-4,
+        "base_lr": 1e-6,
+        "weight_decay": 0.05,
+        "warmup_epochs": 5,
+        "rampup_epochs": 10,
+        "final_lr_fraction": 0.01,
+        "description": "Standard ViT-small - higher LR, more warmup"
+    },
+    "resnet18tv": {
+        "peak_lr": 1e-3,
+        "base_lr": 1e-5,
+        "weight_decay": 1e-4,
+        "warmup_epochs": 2,
+        "rampup_epochs": 3,
+        "final_lr_fraction": 0.1,
+        "description": "ResNet18 torchvision - higher LR for CNN"
+    },
+    "resnet18timm": {
+        "peak_lr": 1e-3,
+        "base_lr": 1e-5,
+        "weight_decay": 1e-4,
+        "warmup_epochs": 2,
+        "rampup_epochs": 3,
+        "final_lr_fraction": 0.1,
+        "description": "ResNet18 TIMM - higher LR for CNN"
+    }    
+}
 
-# ==============
-# DataModule
-# ==============
-
-'''1) Load the Food101 datset
-   2) Apply Transforms (data augmentations for training, resizing for validation)
-   3) Return dataloaders with eht ecorrect batch size (images per patch), shuffling, and workers
-   num_workers - background threads to load data
-   persistent_workers - true means keeps worker threads alive which makes it faster'''
-
-#==========
-# This doesn't get called - it is in PyTorchLgtAttTemplate main
-#===========
-class Food101DataModule(pl.LightningDataModule):
-    def __init__(self, data_dir='./data', batch_size=32, num_workers=4):
-        super().__init__()
-        self.data_dir = data_dir
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-
-        self.train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.2, saturation=0.2, hue=0.1),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229,0.224,0.225])
-        ])
-
-        self.val_transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
-        ])
-
-    def setup(self,stage=None):
-        self.train_dataset = Food101(
-                                root=self.data_dir,
-                                split='train',
-                                transform=self.train_transform,
-                                download=True)
-        self.val_dataset = Food101(
-                                root=self.data_dir,
-                                split='test',
-                                transform=self.val_transform,
-                                download=True)
-
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset,
-                          batch_size=self.batch_size,
-                          shuffle=True,
-                          num_workers=self.num_workers,
-                          persistent_workers=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset,
-                          batch_size=self.batch_size,
-                          shuffle=False,
-                          num_workers=self.num_workers,
-                          persistent_workers=True)
+def get_model_config(model_name):
+    '''
+    Docstring for get_model_config
+    Get the recommended hyperparameters for a given model.
+    Retrun default ViT config if model not found.
+    
+    :param model_name: from the list of models in PyTorchLgtAttTemplate.py
+    '''
+    if model_name in MODEL_CONFIGS:
+        return MODEL_CONFIGS[model_name]
+    else:
+        #Default config for unknown models (ViT-like settings)
+        print(f"Warning: No config found for {model_name}, using default ViT settings")
+        return {
+            "peak_lr": 3e-4,
+            "base_lr": 1e-6,
+            "weight_decay": 0.05,
+            "warmup_epochs": 5,
+            "rampup_epochs": 10,
+            "final_lr_fraction": 0.01,
+            "description": "Default ViT-like settings"
+        }
 
 #===============
 # getRowsAndCols also called by CustomAttentionMultipleFiveSpatial
@@ -173,6 +176,7 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
         self.kC_linear = nn.Linear(self.embed_dim, self.embed_dim)
         self.kD_linear = nn.Linear(self.embed_dim, self.embed_dim)
         self.kE_linear = nn.Linear(self.embed_dim, self.embed_dim)
+        
         self.proj = orig_attn.proj
 
         qkv_weight = orig_attn.qkv.weight.clone()
@@ -239,8 +243,7 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
 
     #     return self.proj(out.transpose(1, 2).reshape(B, N, -1))
 
-    def forward(self, x, **kwargs):
-        # Ignore any extra kwargs like attn_mask that timm might pass
+    def forward(self, x):
         query = x
 
         B, N, _ = query.shape

@@ -31,7 +31,8 @@ class LitNetwork(pl.LightningModule):
                  num_epochs=120,
                  warmup_epochs=3,  # this depends on whether or not it is pretrained shall we do 3 for pretrained?
                  rampup_epochs=5,   # recommended 5?
-                 final_lr_fraction=0.1):
+                 final_lr_fraction=0.1,
+                 num_blocks=12):
         super().__init__()
         #logging the hyperparameters on each run.
         self.save_hyperparameters()
@@ -267,7 +268,8 @@ if __name__ == "__main__":
                 weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
                 warmup_epochs=3, # passing this in shorter for pretrained
                 rampup_epochs=5, #also passing in smaller rampup
-                num_epochs=120
+                num_epochs=120,
+                num_blocks=12
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
     logger = pl_loggers.TensorBoardLogger(save_dir="logs_VitLayer",name=model_name)
