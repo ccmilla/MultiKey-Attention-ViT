@@ -55,10 +55,42 @@ class LitNetwork(pl.LightningModule):
         self.test_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
 
     def on_fit_start(self):
-        self.logger.log_hyperparams(self.hparams)
+        #Log hyperparameters with metrics for HPARAMS tab
+        self.logger.log_hyperparams(
+                            self.hparams,
+                            {
+                                "hp/train_acc": 0,
+                                "hp/val_acc": 0,
+                                "hp/test_acc": 0
+                            }
+                            )
         writer = self.logger.experiment
         dummy_input = torch.randn(1,3,224,224, device=self.device)
         writer.add_graph(self, dummy_input)
+        # Add detailed configuration as text
+        config_text = f"""
+        # Model Configuration
+        **Model:** {self.hparams.model_name}  
+        **Pretrained:** {self.hparams.pretrained}  
+        **Num Blocks:** {self.hparams.num_blocks}  
+        **Freeze Backbone:** {self.hparams.freeze_backbone}
+
+        # Training Configuration
+        **Peak LR:** {self.hparams.peak_lr}  
+        **Base LR:** {self.hparams.base_lr}  
+        **Weight Decay:** {self.hparams.weight_decay}  
+        **Scheduler:** {self.hparams.scheduler_type}  
+        **Warmup Epochs:** {self.hparams.warmup_epochs}  
+        **Rampup Epochs:** {self.hparams.rampup_epochs}  
+        **Total Epochs:** {self.hparams.num_epochs}
+
+        # Regularization
+        **Dropout Rate:** 0.3  
+        **Drop Path Rate:** 0.1  
+        **Mixed Precision:** True
+                """
+        writer.add_text("Configuration", config_text, 0)
+        
     def forward(self, x):
         x = self.model(x)
         return x
@@ -101,16 +133,7 @@ class LitNetwork(pl.LightningModule):
 
         #validation loss
         val_loss = self.loss_func(outs, label)
-        '''
-        self.log(
-            "val_loss",
-            val_loss,
-            prog_bar=True,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True
-        )
-        '''
+        
         #validation accuracy
         self.val_acc(outs,label)
         self.log(
@@ -120,13 +143,7 @@ class LitNetwork(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             sync_dist=True)
-        # self.log(
-        #     "val_acc_step",
-        #     self.val_acc,
-        #     prog_bar=True,
-        #     on_step=True,
-        #     on_epoch=False,
-        #     sync_dist=True)
+        
         return val_loss
 
     def test_step(self, test_data, batch_idx):
@@ -136,36 +153,36 @@ class LitNetwork(pl.LightningModule):
         self.log("test_acc",self.test_acc,prog_bar=True,on_step=False,on_epoch=True,sync_dist=True)
         return None
     
-    # def configure_optimizers(self):
-    #     optimizer = torch.optim.AdamW(self.parameters(), 
-    #                                   lr=self.hparams.peak_lr, 
-    #                                   weight_decay=self.hparams.weight_decay
-    #     )
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), 
+                                      lr=self.hparams.peak_lr, 
+                                      weight_decay=self.hparams.weight_decay
+        )
 
-    #     #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
-    #     assert optimizer.param_groups[0]["lr"] == self.hparams.peak_lr
+        #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
+        assert optimizer.param_groups[0]["lr"] == self.hparams.peak_lr
 
-    #     def lr_lambda(step):
-    #         h = self.hparams # moved all the variables into init
-    #         #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
-    #         steps_per_epoch = self.trainer.estimated_stepping_batches / h.num_epochs
-    #         epoch_step = step / steps_per_epoch
+        def lr_lambda(step):
+            h = self.hparams # moved all the variables into init
+            #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
+            steps_per_epoch = self.trainer.estimated_stepping_batches / h.num_epochs
+            epoch_step = step / steps_per_epoch
 
-    #         if epoch_step < h.warmup_epochs:
-    #             return h.base_lr / h.peak_lr
-    #         elif epoch_step < h.warmup_epochs + h.rampup_epochs:
-    #             progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
-    #             lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
-    #             return lr / h.peak_lr
-    #         else:
-    #             decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
-    #             cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-    #             lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
-    #             return lr / h.peak_lr
+            if epoch_step < h.warmup_epochs:
+                return h.base_lr / h.peak_lr
+            elif epoch_step < h.warmup_epochs + h.rampup_epochs:
+                progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
+                lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
+                return lr / h.peak_lr
+            else:
+                decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
+                cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+                lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
+                return lr / h.peak_lr
 
-    #     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    #     return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
-    ''' New configure_optimizers function.  Pretrained is true so we won't be using lr_lambda'''
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
+    ''' New configure_optimizers function.  Pretrained is true so we won't be using lr_lambda
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.parameters(),
@@ -184,14 +201,7 @@ class LitNetwork(pl.LightningModule):
                 "scheduler": scheduler,
                 "interval": "epoch"    # update once per epoch, not per step
             }
-        }
-
-    # def setup(self, stage=None):
-    #     #Guardrail: optimizer LR must equal peak LR for LambdaLR logic
-    #     assert self.hparams.lr == self.hparams.peak_lr, (
-    #         f"Expect lr ({self.hparams.lr}) to equal peak_lr"
-    #         f"({self.hparams.peak_lr}) for LambdaLR scaling"
-    #     )
+        }'''
 
 #==========
 # main training script
