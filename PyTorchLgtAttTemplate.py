@@ -136,35 +136,56 @@ class LitNetwork(pl.LightningModule):
         self.log("test_acc",self.test_acc,prog_bar=True,on_step=False,on_epoch=True,sync_dist=True)
         return None
     
+    # def configure_optimizers(self):
+    #     optimizer = torch.optim.AdamW(self.parameters(), 
+    #                                   lr=self.hparams.peak_lr, 
+    #                                   weight_decay=self.hparams.weight_decay
+    #     )
+
+    #     #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
+    #     assert optimizer.param_groups[0]["lr"] == self.hparams.peak_lr
+
+    #     def lr_lambda(step):
+    #         h = self.hparams # moved all the variables into init
+    #         #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
+    #         steps_per_epoch = self.trainer.estimated_stepping_batches / h.num_epochs
+    #         epoch_step = step / steps_per_epoch
+
+    #         if epoch_step < h.warmup_epochs:
+    #             return h.base_lr / h.peak_lr
+    #         elif epoch_step < h.warmup_epochs + h.rampup_epochs:
+    #             progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
+    #             lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
+    #             return lr / h.peak_lr
+    #         else:
+    #             decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
+    #             cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
+    #             lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
+    #             return lr / h.peak_lr
+
+    #     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+    #     return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
+    ''' New configure_optimizers function.  Pretrained is true so we won't be using lr_lambda'''
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), 
-                                      lr=self.hparams.peak_lr, 
-                                      weight_decay=self.hparams.weight_decay
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.peak_lr,
+            weight_decay=self.hparams.weight_decay
         )
+        #Simple cosine annealing
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.hparams.num_epochs,
+            eta_min=1e-6 # min learning rate at end
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_schedule": {
+                "scheduler": scheduler,
+                "interval": "epoch"    # update once per epoch, not per step
+            }
+        }
 
-        #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
-        assert optimizer.param_groups[0]["lr"] == self.hparams.peak_lr
-
-        def lr_lambda(step):
-            h = self.hparams # moved all the variables into init
-            #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
-            steps_per_epoch = self.trainer.estimated_stepping_batches / h.num_epochs
-            epoch_step = step / steps_per_epoch
-
-            if epoch_step < h.warmup_epochs:
-                return h.base_lr / h.peak_lr
-            elif epoch_step < h.warmup_epochs + h.rampup_epochs:
-                progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
-                lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
-                return lr / h.peak_lr
-            else:
-                decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
-                cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
-                lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
-                return lr / h.peak_lr
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
     # def setup(self, stage=None):
     #     #Guardrail: optimizer LR must equal peak LR for LambdaLR logic
     #     assert self.hparams.lr == self.hparams.peak_lr, (
