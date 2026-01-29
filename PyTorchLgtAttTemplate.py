@@ -9,7 +9,7 @@ import timm
 import pandas as pd
 import math
 
-from models import select_image_model
+from models import select_image_model, get_model_config
 
 #==========
 # Lightning powered training wrapper
@@ -34,14 +34,54 @@ class LitNetwork(pl.LightningModule):
                  final_lr_fraction=0.1,
                  num_blocks=12):
         super().__init__()
+
+        #get model specific config
+        model_config = get_model_config(model_name)
+        
+        # Use model-specific defaults if not provided
+        if peak_lr is None:
+            peak_lr = model_config["peak_lr"]
+        if base_lr is None:
+            base_lr = model_config["base_lr"]
+        if weight_decay is None:
+            weight_decay = model_config["weight_decay"]
+        if warmup_epochs is None:
+            warmup_epochs = model_config["warmup_epochs"]
+        if rampup_epochs is None:
+            rampup_epochs = model_config["rampup_epochs"]
+        if final_lr_fraction is None:
+            final_lr_fraction = model_config["final_lr_fraction"]
+        
+        # Backward compatibility: lr is an alias for peak_lr
+        if lr is not None:
+            peak_lr = lr
+        
+        # Store for save_hyperparameters
+        self.model_name = model_name
+        self.freeze_backbone = freeze_backbone
+        self.pretrained = pretrained
+        self.lr = peak_lr
+        self.base_lr = base_lr
+        self.peak_lr = peak_lr
+        self.weight_decay = weight_decay
+        self.num_epochs = num_epochs
+        self.warmup_epochs = warmup_epochs
+        self.rampup_epochs = rampup_epochs
+        self.final_lr_fraction = final_lr_fraction
+        self.num_blocks = num_blocks
+
         #logging the hyperparameters on each run.
         self.save_hyperparameters()
 
+        print(f"\n{'='*60}")
+        print(f"Model: {model_name}")
+        print(f"Using config: {model_config['description']}")
+        print(f"Peak LR: {peak_lr}, Weight Decay: {weight_decay}")
+        print(f"Warmup: {warmup_epochs}, Rampup: {rampup_epochs}")
+        print(f"{'='*60}\n")
+
         # scale warmup/rampup with num_epochs
         h = self.hparams
-        #passing in warmup and rampup epochs
-        # h.warmup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
-        # h.rampup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
         
         n_classes = 101 #Change num_classes to the number of classification categories in dataset
 
@@ -80,7 +120,6 @@ class LitNetwork(pl.LightningModule):
         **Peak LR:** {self.hparams.peak_lr}  
         **Base LR:** {self.hparams.base_lr}  
         **Weight Decay:** {self.hparams.weight_decay}  
-        **Scheduler:** {self.hparams.scheduler_type}  
         **Warmup Epochs:** {self.hparams.warmup_epochs}  
         **Rampup Epochs:** {self.hparams.rampup_epochs}  
         **Total Epochs:** {self.hparams.num_epochs}
@@ -95,6 +134,7 @@ class LitNetwork(pl.LightningModule):
     def forward(self, x):
         x = self.model(x)
         return x
+    
     def training_step(self, batch, batch_idx):
         images, labels = batch
         
@@ -263,13 +303,14 @@ if __name__ == "__main__":
                 model_name=model_name,
                 pretrained=True,
                 freeze_backbone=False,
-                lr=1e-4, #toggling between 2e-4 and 1e-4
-                peak_lr=1e-4, # this a good number?
-                weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
-                warmup_epochs=3, # passing this in shorter for pretrained
-                rampup_epochs=5, #also passing in smaller rampup
+                peak_lr=2e-4,
+                # lr=1e-4, #toggling between 2e-4 and 1e-4
+                # peak_lr=1e-4, # this a good number?
+                # weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
+                # warmup_epochs=3, # passing this in shorter for pretrained
+                # rampup_epochs=5, #also passing in smaller rampup
                 num_epochs=120,
-                num_blocks=12
+                num_blocks=12 #all LR params will use model-specific defaults from MODEL_CONFIGS
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
     logger = pl_loggers.TensorBoardLogger(save_dir="logs_VitLayer",name=model_name)

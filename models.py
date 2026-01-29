@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
 import torchvision
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.datasets import Food101
-import pytorch_lightning as pl
 import timm
 import math
 import numpy as np
@@ -243,7 +239,7 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
 
     #     return self.proj(out.transpose(1, 2).reshape(B, N, -1))
 
-    def forward(self, x):
+    def forward(self, x, **kwargs): #Accepts and ignores extra kwargs
         query = x
 
         B, N, _ = query.shape
