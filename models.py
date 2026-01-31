@@ -10,68 +10,6 @@ import math
 import numpy as np
 from timm import create_model
 
-
-# ==============
-# DataModule
-# ==============
-
-'''1) Load the Food101 datset
-   2) Apply Transforms (data augmentations for training, resizing for validation)
-   3) Return dataloaders with eht ecorrect batch size (images per patch), shuffling, and workers
-   num_workers - background threads to load data
-   persistent_workers - true means keeps worker threads alive which makes it faster'''
-
-#==========
-# This doesn't get called - it is in PyTorchLgtAttTemplate main
-#===========
-class Food101DataModule(pl.LightningDataModule):
-    def __init__(self, data_dir='./data', batch_size=32, num_workers=4):
-        super().__init__()
-        self.data_dir = data_dir
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-
-        self.train_transform = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ColorJitter(brightness=0.2, saturation=0.2, hue=0.1),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229,0.224,0.225])
-        ])
-
-        self.val_transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
-        ])
-
-    def setup(self,stage=None):
-        self.train_dataset = Food101(
-                                root=self.data_dir,
-                                split='train',
-                                transform=self.train_transform,
-                                download=True)
-        self.val_dataset = Food101(
-                                root=self.data_dir,
-                                split='test',
-                                transform=self.val_transform,
-                                download=True)
-
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset,
-                          batch_size=self.batch_size,
-                          shuffle=True,
-                          num_workers=self.num_workers,
-                          persistent_workers=True)
-
-    def val_dataloader(self):
-        return DataLoader(self.val_dataset,
-                          batch_size=self.batch_size,
-                          shuffle=False,
-                          num_workers=self.num_workers,
-                          persistent_workers=True)
-
 #===============
 # getRowsAndCols also called by CustomAttentionMultipleFiveSpatial
 # Maps every image patch to the row and column coordinates of its center, so later code can reason about spatial
@@ -341,7 +279,7 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
 class ViTLayerReduction(nn.Module):
     #added patch size and img_size
     #num_blocks_to_keep for consistency
-    def __init__(self, num_blocks_to_keep, patch_size=16, num_classes=101, img_size=224, pretrained=True): #added pretrained
+    def __init__(self, num_blocks_to_keep, patch_size, num_classes, img_size, pretrained): 
         super().__init__()
         full_model = create_model(
             "vit_small_patch16_224",
@@ -390,8 +328,10 @@ class ViTLayerReduction(nn.Module):
 # Given the model name, class count, and free/fine-tune preference, and it hands back
 # the right neural network configured for training
 # ============      
-def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backbone=False, pretrained=False):
-    if model_name == "resnet18tv":
+def select_image_model(num_blocks_to_keep, model_name, n_classes, freeze_backbone, pretrained):
+    if model_name == "vit_small_patch16_224":
+        model = timm.create_model("vit_small_patch16_224", pretrained=pretrained, num_classes=n_classes)
+    elif model_name == "resnet18tv":
         model = torchvision.models.resnet18(pretrained=pretrained)
         model.fc = nn.Linear(model.fc.in_features, n_classes)
 
@@ -402,17 +342,12 @@ def select_image_model(model_name="ViTLayerReduction", n_classes=5, freeze_backb
                 param.requires_grad = True
     elif model_name == "resnet18timm":
         model = timm.create_model("resnet18", pretrained=pretrained, num_classes=n_classes)
-
-        if freeze_backbone:
-            for param in model.parameters():
-                param.requires_grad = False
-            for param in model.fc.parameters():
-                param.requires_grad = True
     elif model_name == "ViTLayerReduction":
-        model = ViTLayerReduction(num_blocks_to_keep=12, # change from 10 to all 12
-                                  patch_size=16, 
+        model = ViTLayerReduction(num_blocks_to_keep=num_blocks_to_keep, 
+                                  patch_size=16,
+                                  num_classes=n_classes, 
                                   img_size=224, 
-                                  pretrained=pretrained) #keeping 10 blocks and added pretrained
+                                  pretrained=pretrained)
     else:
         model = timm.create_model(model_name, pretrained=pretrained, num_classes=n_classes)
 

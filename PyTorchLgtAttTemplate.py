@@ -1,12 +1,9 @@
 import torch
-import torch.nn as nn
 import torchmetrics
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import torchvision
-import timm
-import pandas as pd
 import math
 
 from models import select_image_model
@@ -21,33 +18,37 @@ class LitNetwork(pl.LightningModule):
     #Residual Network Deep Residual Learning for Image Recognition with 18 layers.
     #Convultional, pooling, fully connected, and skip connection layers.
     def __init__(self, 
-                 model_name="ViTLayerReduction", 
-                 freeze_backbone=False, 
-                 pretrained=True,
-                 lr=1e-4,
-                 base_lr=1e-6,
-                 peak_lr =1e-4,
-                 weight_decay=0.01, #changing from .5 to 0.01
-                 num_epochs=120,
-                 warmup_epochs=3,  # this depends on whether or not it is pretrained shall we do 3 for pretrained?
-                 rampup_epochs=5,   # recommended 5?
-                 final_lr_fraction=0.1):
+                 model_name, 
+                 freeze_backbone, 
+                 pretrained,
+                 lr,
+                 peak_lr,
+                 weight_decay,
+                 warmup_epochs,  
+                 rampup_epochs,
+                 num_epochs,
+                 final_lr_fraction,   
+                 num_blocks_to_keep, 
+                 ):
         super().__init__()
+        self.lr = lr
+        self.peak_lr = peak_lr
+        self.warmup_epochs = warmup_epochs
+        self.weight_decay = weight_decay
+        self.rampup_epochs = rampup_epochs
+        self.num_epochs = num_epochs
+        self.final_lr_fraction = final_lr_fraction
+        self.num_blocks_to_keep = num_blocks_to_keep 
         #logging the hyperparameters on each run.
         self.save_hyperparameters()
-
-        # scale warmup/rampup with num_epochs
-        h = self.hparams
-        #passing in warmup and rampup epochs
-        # h.warmup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
-        # h.rampup_epochs = max(1, int(0.1 * h.num_epochs))   # 10% of total epochs
-        
+        #short cut
+        h = self.parameters
         n_classes = 101 #Change num_classes to the number of classification categories in dataset
-
         self.model = select_image_model(model_name=model_name, 
                                         n_classes=n_classes, 
                                         freeze_backbone=freeze_backbone,
-                                        pretrained=pretrained)
+                                        pretrained=pretrained,
+                                        num_blocks_to_keep=num_blocks_to_keep)
 
         self.loss_func = torch.nn.CrossEntropyLoss()
         self.train_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
@@ -65,8 +66,8 @@ class LitNetwork(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, labels = batch
         
-        if batch_idx == 0:
-            print("ACTUAL_LR: ", self.optimizers().param_groups[0]["lr"])
+        # if batch_idx == 0:
+        #     print("ACTUAL_LR: ", self.optimizers().param_groups[0]["lr"])
 
         #forward pass
         logits = self(images)
@@ -87,7 +88,6 @@ class LitNetwork(pl.LightningModule):
                  on_epoch=True,
                  sync_dist=True
                 )
-        #self.log("train_acc_step", acc, prog_bar=True, on_step=True, on_epoch=False)
         
         # Log LR
         optimizer = self.optimizers()
@@ -95,22 +95,12 @@ class LitNetwork(pl.LightningModule):
         self.log("lr", lr, prog_bar=True, on_step=True, on_epoch=False)
         return loss
     
-    def validation_step(self, val_data, batch_idx):
+    def validation_step(self, val_data):
         im, label = val_data[0], val_data[1]
         outs = self.forward(im)
 
         #validation loss
         val_loss = self.loss_func(outs, label)
-        '''
-        self.log(
-            "val_loss",
-            val_loss,
-            prog_bar=True,
-            on_step=False,
-            on_epoch=True,
-            sync_dist=True
-        )
-        '''
         #validation accuracy
         self.val_acc(outs,label)
         self.log(
@@ -120,16 +110,9 @@ class LitNetwork(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             sync_dist=True)
-        # self.log(
-        #     "val_acc_step",
-        #     self.val_acc,
-        #     prog_bar=True,
-        #     on_step=True,
-        #     on_epoch=False,
-        #     sync_dist=True)
         return val_loss
 
-    def test_step(self, test_data, batch_idx):
+    def test_step(self, test_data):
         im, label = test_data[0], test_data[1]
         outs = self.forward(im)
         self.test_acc(outs,label)
@@ -137,14 +120,20 @@ class LitNetwork(pl.LightningModule):
         return None
     
     def configure_optimizers(self):
+         # shortcut
+        h = self.hparams
         optimizer = torch.optim.AdamW(self.parameters(), 
-                                      lr=self.hparams.peak_lr, 
-                                      weight_decay=self.hparams.weight_decay
+                                      lr=h.peak_lr, 
+                                      weight_decay=h.weight_decay
         )
 
-        #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
-        assert optimizer.param_groups[0]["lr"] == self.hparams.peak_lr
+        # Choose scheduler based on model architecture
+        model_name = self.hparams.model_name
 
+        #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
+        assert optimizer.param_groups[0]["lr"] == h.peak_lr
+
+        #custom learning rate for custom ViT
         def lr_lambda(step):
             h = self.hparams # moved all the variables into init
             #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
@@ -152,25 +141,52 @@ class LitNetwork(pl.LightningModule):
             epoch_step = step / steps_per_epoch
 
             if epoch_step < h.warmup_epochs:
-                return h.base_lr / h.peak_lr
+                return h.lr / h.peak_lr
             elif epoch_step < h.warmup_epochs + h.rampup_epochs:
                 progress = (epoch_step - h.warmup_epochs) / h.rampup_epochs
-                lr = h.base_lr + progress * (h.peak_lr - h.base_lr)
+                lr = h.lr + progress * (h.peak_lr - h.lr)
                 return lr / h.peak_lr
             else:
                 decay_progress = (epoch_step - h.warmup_epochs - h.rampup_epochs) / max(1, h.num_epochs - h.warmup_epochs - h.rampup_epochs)
                 cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
                 lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
                 return lr / h.peak_lr
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step"}}
-    # def setup(self, stage=None):
-    #     #Guardrail: optimizer LR must equal peak LR for LambdaLR logic
-    #     assert self.hparams.lr == self.hparams.peak_lr, (
-    #         f"Expect lr ({self.hparams.lr}) to equal peak_lr"
-    #         f"({self.hparams.peak_lr}) for LambdaLR scaling"
-    #     )
+        if "vit" in model_name.lower() or "ViT" in model_name:
+            # Vision Transformers: Use custom warmup + cosine
+            print(f"Using LambdaLR with warmup for model {model_name}")
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "step"
+                }
+            }
+        elif "resnet" in model_name.lower():
+            #CNNs: Simple consine annealing (no warmup needed)
+            print(f"Using CosineAnnealingLr for {model_name}")
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.num_epochs, eta_min=1e-6)
+            return{
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "epoch"
+                }
+            }
+        else:
+            #Default: Reduce on plateau (safe choice)
+            print(f"Using ReduceLROnPlateau for {model_name}")
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                mode='max',
+                factor=0.5,
+                patience=5,
+                verbose=True
+            )
+            return {"optimizer": optimizer, 
+                    "lr_scheduler": {
+                        "scheduler": scheduler, 
+                        "interval": "step"}}
 
 #==========
 # main training script
@@ -187,8 +203,6 @@ if __name__ == "__main__":
     dataset_dir = "data/"
     model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", "resnet18timm"]  # Add more model names as needed
     model_name = model_names[0]
-    #changing this for an increase in accuracy
-    pretrained = True
     b = 64
     width = 224
     height = 224
@@ -211,12 +225,6 @@ if __name__ == "__main__":
                           download=True 
     )
 
-    #train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.8), len(train_dataset) - int(len(train_dataset)*0.8)])
-    #train_dataset= torch.utils.data.random_split(train_dataset, [int(len(train_dataset)*0.8), len(train_dataset) - int(len(train_dataset)*0.8)])
-
-    #test_dataset = torchvision.datasets.Food101(root=dataset_dir, split='test', transform=transforms, download=True)
-    # Split test into val + test (80/20 split of the test set)
-
     val_dataset, test_dataset = torch.utils.data.random_split(
                                                     test_dataset, 
                                                     [int(len(test_dataset)*0.8), len(test_dataset) - int(len(test_dataset)*0.8)]
@@ -230,16 +238,18 @@ if __name__ == "__main__":
     model = LitNetwork(
                 model_name=model_name,
                 pretrained=True,
-                freeze_backbone=False,
-                lr=1e-4, #toggling between 2e-4 and 1e-4
+                freeze_backbone=True,
+                lr=2e-4, #toggling between 2e-4 and 1e-4
                 peak_lr=1e-4, # this a good number?
                 weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
                 warmup_epochs=3, # passing this in shorter for pretrained
                 rampup_epochs=5, #also passing in smaller rampup
-                num_epochs=120
+                num_epochs=120,
+                final_lr_fraction=0.1,
+                num_blocks_to_keep=12,
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
-    logger = pl_loggers.TensorBoardLogger(save_dir="logs_VitLayer",name=model_name)
+    logger = pl_loggers.TensorBoardLogger(save_dir="customScheduler",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
