@@ -123,17 +123,17 @@ class LitNetwork(pl.LightningModule):
          # shortcut
         h = self.hparams
         optimizer = torch.optim.AdamW(self.parameters(), 
-                                      lr=h.peak_lr, 
+                                      lr=h.lr, # change from h.peak_lr to h.lr
                                       weight_decay=h.weight_decay
         )
 
         # Choose scheduler based on model architecture
-        model_name = self.hparams.model_name
+        model_name = h.model_name
 
-        #adding this to make sure that lr is the same as peak_lr to increase training and validation accuracy
-        assert optimizer.param_groups[0]["lr"] == h.peak_lr
+        #adding this to make sure lr has correctly set the initial lr
+        assert optimizer.param_groups[0]["lr"] == h.lr # change from peak_lr to lr
 
-        #custom learning rate for custom ViT
+        #custom learning rate for custom ViT as well as vit_small_patch16_224
         def lr_lambda(step):
             h = self.hparams # moved all the variables into init
             #steps_per_epoch = self.trainer.estimated_stepping_batches / self.hparams.num_epochs
@@ -186,7 +186,7 @@ class LitNetwork(pl.LightningModule):
             return {"optimizer": optimizer, 
                     "lr_scheduler": {
                         "scheduler": scheduler, 
-                        "interval": "step"}}
+                        "interval": "epoch"}}
 
 #==========
 # main training script
@@ -234,15 +234,14 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset,batch_size=b,shuffle=False, num_workers=12, persistent_workers=True)
     test_loader = DataLoader(test_dataset,batch_size=b)
 
-    #added lr, increased num_epochs to 120 and made sure freeze_backbone is false and pretrain is true.
     model = LitNetwork(
                 model_name=model_name,
                 pretrained=True,
-                freeze_backbone=True,
-                lr=2e-4, #toggling between 2e-4 and 1e-4
-                peak_lr=1e-4, # this a good number?
+                freeze_backbone=False,
+                lr=1e-5, #increased from 1e-4 since learning seems slow
+                peak_lr=2e-4, # matches with lr?
                 weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
-                warmup_epochs=3, # passing this in shorter for pretrained
+                warmup_epochs=5, # passing this in shorter for pretrained
                 rampup_epochs=5, #also passing in smaller rampup
                 num_epochs=120,
                 final_lr_fraction=0.1,

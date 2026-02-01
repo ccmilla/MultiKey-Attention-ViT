@@ -279,14 +279,18 @@ class CustomAttentionMultipleFiveSpatial(nn.Module):
 class ViTLayerReduction(nn.Module):
     #added patch size and img_size
     #num_blocks_to_keep for consistency
-    def __init__(self, num_blocks_to_keep, patch_size, num_classes, img_size, pretrained): 
+    def __init__(self, 
+                 num_blocks_to_keep, 
+                 patch_size, 
+                 num_classes, 
+                 img_size, 
+                 pretrained
+                 ): 
         super().__init__()
         full_model = create_model(
             "vit_small_patch16_224",
             pretrained=pretrained,
             num_classes=num_classes,
-            drop_rate=0.3,  #changing back to original
-            drop_path_rate=0.1 #changing back to orginal
         )
         #extracting important internal modules
         self.patch_embed = full_model.patch_embed #converts image patches into vectors
@@ -328,7 +332,13 @@ class ViTLayerReduction(nn.Module):
 # Given the model name, class count, and free/fine-tune preference, and it hands back
 # the right neural network configured for training
 # ============      
-def select_image_model(num_blocks_to_keep, model_name, n_classes, freeze_backbone, pretrained):
+def select_image_model( 
+                       model_name, 
+                       n_classes, 
+                       freeze_backbone, 
+                       pretrained,
+                       num_blocks_to_keep,
+):
     if model_name == "vit_small_patch16_224":
         model = timm.create_model("vit_small_patch16_224", pretrained=pretrained, num_classes=n_classes)
     elif model_name == "resnet18tv":
@@ -347,7 +357,8 @@ def select_image_model(num_blocks_to_keep, model_name, n_classes, freeze_backbon
                                   patch_size=16,
                                   num_classes=n_classes, 
                                   img_size=224, 
-                                  pretrained=pretrained)
+                                  pretrained=pretrained
+                                  )
     else:
         model = timm.create_model(model_name, pretrained=pretrained, num_classes=n_classes)
 
