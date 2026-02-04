@@ -41,8 +41,6 @@ class LitNetwork(pl.LightningModule):
         self.num_blocks_to_keep = num_blocks_to_keep 
         #logging the hyperparameters on each run.
         self.save_hyperparameters()
-        #short cut
-        h = self.parameters
         n_classes = 101 #Change num_classes to the number of classification categories in dataset
         self.model = select_image_model(model_name=model_name, 
                                         n_classes=n_classes, 
@@ -50,7 +48,7 @@ class LitNetwork(pl.LightningModule):
                                         pretrained=pretrained,
                                         num_blocks_to_keep=num_blocks_to_keep)
 
-        self.loss_func = torch.nn.CrossEntropyLoss()
+        self.loss_func = torch.nn.CrossEntropyLoss() 
         self.train_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
         self.val_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
         self.test_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
@@ -236,18 +234,27 @@ if __name__ == "__main__":
 
     model = LitNetwork(
                 model_name=model_name,
-                pretrained=True,
+                pretrained=False,
                 freeze_backbone=False,
-                lr=1e-5, #increased from 1e-4 since learning seems slow
+                lr=1e-4, #increased from 1e-4 since learning seems slow
                 peak_lr=2e-4, # matches with lr?
-                weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
-                warmup_epochs=5, # passing this in shorter for pretrained
-                rampup_epochs=5, #also passing in smaller rampup
+                weight_decay=0.01, #was using 0.5 which is too high which was killing learning
+                warmup_epochs=3, # passing this in shorter for pretrained
+                rampup_epochs=7, #also passing in smaller rampup
                 num_epochs=120,
                 final_lr_fraction=0.1,
                 num_blocks_to_keep=12,
                 )
-    checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
+    checkpoint = pl.callbacks.ModelCheckpoint(
+                                monitor='val_acc_epoch', 
+                                save_top_k=1, 
+                                mode='max')
+    #stop training when validation stops improving:
+    # early_stop = pl.callbacks.EarlyStopping(
+    #     monitor="val_acc_epoch",
+    #     patience = 10,
+    #     mode='max'
+    # )
     logger = pl_loggers.TensorBoardLogger(save_dir="customScheduler",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
