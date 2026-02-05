@@ -236,26 +236,23 @@ if __name__ == "__main__":
                 model_name=model_name,
                 pretrained=False,
                 freeze_backbone=False,
-                lr=1e-4, #increased from 1e-4 since learning seems slow
-                peak_lr=2e-4, # matches with lr?
-                weight_decay=0.01, #was using 0.5 which is too high which was killing learning
-                warmup_epochs=3, # passing this in shorter for pretrained
-                rampup_epochs=7, #also passing in smaller rampup
+                lr=1e-6, #increased from 1e-4 since learning seems slow
+                peak_lr=1e-3, # matches with lr?
+                weight_decay=0.05, #was using 0.5 which is too high which was killing learning
+                warmup_epochs=5, # passing this in shorter for pretrained
+                rampup_epochs=5, #also passing in smaller rampup
                 num_epochs=120,
                 final_lr_fraction=0.1,
                 num_blocks_to_keep=12,
                 )
-    checkpoint = pl.callbacks.ModelCheckpoint(
-                                monitor='val_acc_epoch', 
-                                save_top_k=1, 
-                                mode='max')
+    checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
     #stop training when validation stops improving:
     # early_stop = pl.callbacks.EarlyStopping(
     #     monitor="val_acc_epoch",
     #     patience = 10,
     #     mode='max'
     # )
-    logger = pl_loggers.TensorBoardLogger(save_dir="customScheduler",name=model_name)
+    logger = pl_loggers.TensorBoardLogger(save_dir="notPretrained12",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
