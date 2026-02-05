@@ -28,7 +28,7 @@ class LitNetwork(pl.LightningModule):
                  base_lr=1e-6,
                  peak_lr =1e-4,
                  weight_decay=0.01, #changing from .5 to 0.01
-                 num_epochs=120,
+                 num_epochs=10,
                  warmup_epochs=3,  # this depends on whether or not it is pretrained shall we do 3 for pretrained?
                  rampup_epochs=5,   # recommended 5?
                  final_lr_fraction=0.1,
@@ -309,17 +309,17 @@ if __name__ == "__main__":
                 # weight_decay=0.01, #added (was using 0.5 which is too high which was killing learning)
                 # warmup_epochs=3, # passing this in shorter for pretrained
                 # rampup_epochs=5, #also passing in smaller rampup
-                num_epochs=120,
+                num_epochs=10,
                 num_blocks=12 #all LR params will use model-specific defaults from MODEL_CONFIGS
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
-    logger = pl_loggers.TensorBoardLogger(save_dir="logs_VitLayer",name=model_name)
+    logger = pl_loggers.TensorBoardLogger(save_dir="Fix_LowAccuracy",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
     device = "gpu"
     torch.set_float32_matmul_precision('medium')
-    trainer = pl.Trainer(max_epochs=120, accelerator=device, callbacks=[checkpoint], logger=logger)
+    trainer = pl.Trainer(max_epochs=10, accelerator=device, callbacks=[checkpoint], logger=logger)
     trainer.fit(model,train_loader,val_loader)
     
     trainer.test(ckpt_path="best", dataloaders=test_loader)

@@ -9,3 +9,5 @@ logs_VitLayer/
 logs_overfit_test/
 baseline_comparison/
 customScheduler/
+notPretrained12/
+Fix_LowAccuracy/
