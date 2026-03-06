@@ -10,3 +10,9 @@ logs_overfit_test/
 baseline_comparison/
 customScheduler/
 notPretrained12/
+Fix_LowAccuracy/
+dropPathRateAndSwin/
+localDirectionVit_base/
+notPretrained8/
+notPretrained4/
+notPretrained6/

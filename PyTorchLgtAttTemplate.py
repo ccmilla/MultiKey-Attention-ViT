@@ -5,6 +5,7 @@ from pytorch_lightning import loggers as pl_loggers
 from torch.utils.data import DataLoader
 import torchvision
 import math
+import time
 
 from models import select_image_model
 
@@ -28,17 +29,28 @@ class LitNetwork(pl.LightningModule):
                  rampup_epochs,
                  num_epochs,
                  final_lr_fraction,   
-                 num_blocks_to_keep, 
+                 num_blocks_to_keep,
+                 drop_path_rate,
+                 use_dwconv_bypass, #adding dephthwise convolution
+                 num_local_directional_blocks, # adding this for local directional attention
+                 window_size, #adding this for local directional attention
+                 altGlobal  #adding this for local directional attention 
                  ):
         super().__init__()
         self.lr = lr
         self.peak_lr = peak_lr
         self.warmup_epochs = warmup_epochs
-        self.weight_decay = weight_decay
         self.rampup_epochs = rampup_epochs
         self.num_epochs = num_epochs
+        self.weight_decay = weight_decay
         self.final_lr_fraction = final_lr_fraction
-        self.num_blocks_to_keep = num_blocks_to_keep 
+        self.num_blocks_to_keep = num_blocks_to_keep
+        self.drop_path_rate = drop_path_rate
+        self.use_dwconv_bypass = use_dwconv_bypass
+        self.num_local_directional_blocks = num_local_directional_blocks
+        self.window_size = window_size
+        self.altGlobal = altGlobal
+        
         #logging the hyperparameters on each run.
         self.save_hyperparameters()
         n_classes = 101 #Change num_classes to the number of classification categories in dataset
@@ -46,7 +58,13 @@ class LitNetwork(pl.LightningModule):
                                         n_classes=n_classes, 
                                         freeze_backbone=freeze_backbone,
                                         pretrained=pretrained,
-                                        num_blocks_to_keep=num_blocks_to_keep)
+                                        num_blocks_to_keep=num_blocks_to_keep,
+                                        drop_path_rate=drop_path_rate,
+                                        use_dwconv_bypass=use_dwconv_bypass, #pass through wrapper dwconv
+                                        window_size=window_size, # pass through for localDirectionalViT
+                                        num_local_directional_blocks=num_local_directional_blocks, # pass through for localDirectionalViT
+                                        altGlobal=altGlobal # pass through for localDirectionalViT
+                                        )
 
         self.loss_func = torch.nn.CrossEntropyLoss() 
         self.train_acc = torchmetrics.Accuracy("multiclass",num_classes=n_classes,average='micro')
@@ -55,9 +73,9 @@ class LitNetwork(pl.LightningModule):
 
     def on_fit_start(self):
         self.logger.log_hyperparams(self.hparams)
-        writer = self.logger.experiment
-        dummy_input = torch.randn(1,3,224,224, device=self.device)
-        writer.add_graph(self, dummy_input)
+        # writer = self.logger.experiment
+        # dummy_input = torch.randn(1,3,224,224, device=self.device)
+        # writer.add_graph(self, dummy_input)
     def forward(self, x):
         x = self.model(x)
         return x
@@ -108,6 +126,8 @@ class LitNetwork(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             sync_dist=True)
+        #adding validation loss
+        self.log("train_loss",val_loss,on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
         return val_loss
 
     def test_step(self, test_data):
@@ -117,11 +137,20 @@ class LitNetwork(pl.LightningModule):
         self.log("test_acc",self.test_acc,prog_bar=True,on_step=False,on_epoch=True,sync_dist=True)
         return None
     
+    def on_train_epoch_start(self):
+        #return super().on_train_epoch_start() #keeping track of time per epoch to see if each epoch is computationaly expensive.
+        self.epoch_start_time = time.time()
+    
+    def on_train_epoch_end(self):
+        epoch_time = time.time() - self.epoch_start_time
+        self.log("epoch_time_minutes", epoch_time/60.0, on_epoch=True, prog_bar=True)
+        #return super().on_train_epoch_end()
+    
     def configure_optimizers(self):
          # shortcut
         h = self.hparams
         optimizer = torch.optim.AdamW(self.parameters(), 
-                                      lr=h.lr, # change from h.peak_lr to h.lr
+                                      lr=h.lr, #claude said to use peak_lr
                                       weight_decay=h.weight_decay
         )
 
@@ -129,7 +158,7 @@ class LitNetwork(pl.LightningModule):
         model_name = h.model_name
 
         #adding this to make sure lr has correctly set the initial lr
-        assert optimizer.param_groups[0]["lr"] == h.lr # change from peak_lr to lr
+        #assert optimizer.param_groups[0]["lr"] == h.peak_lr # claude suggested peak_lr
 
         #custom learning rate for custom ViT as well as vit_small_patch16_224
         def lr_lambda(step):
@@ -149,10 +178,28 @@ class LitNetwork(pl.LightningModule):
                 cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_progress))
                 lr = h.final_lr_fraction * h.peak_lr + (1 - h.final_lr_fraction) * h.peak_lr * cosine_decay
                 return lr / h.peak_lr
-        if "vit" in model_name.lower() or "ViT" in model_name:
+        if "vit_small" in model_name.lower() \
+            or "ViT" in model_name \
+            or "DWConv" in model_name \
+            or "LocalDirectional" in model_name:
             # Vision Transformers: Use custom warmup + cosine
             print(f"Using LambdaLR with warmup for model {model_name}")
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+            
+            #Calculate steps per epoch properly
+            # steps_per_epoch = self.trainer.estimated_stepping_batches // h.num_epochs
+
+            # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            #                             optimizer,
+            #                             max_lr=h.peak_lr,   #peak learning rate
+            #                             total_steps=self.trainer.estimated_stepping_batches,
+            #                             epochs=h.num_epochs,    #training epochs
+            #                             steps_per_epoch=steps_per_epoch,
+            #                             pct_start= h.warmup_epochs/h.num_epochs,    #percentage of training warmup
+            #                             anneal_strategy='cos', #cosine annealing
+            #                             div_factor=h.peak_lr/h.lr,   #initial_lr = max_lr/div_factor (so ie-3/25 = 4e-5)
+            #                             final_div_factor=h.peak_lr/ (h.final_lr_fraction * h.peak_lr)
+            #                             )
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
@@ -160,7 +207,7 @@ class LitNetwork(pl.LightningModule):
                     "interval": "step"
                 }
             }
-        elif "resnet" in model_name.lower():
+        elif "resnet" in model_name.lower() or "swin" in model_name.lower():
             #CNNs: Simple consine annealing (no warmup needed)
             print(f"Using CosineAnnealingLr for {model_name}")
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.hparams.num_epochs, eta_min=1e-6)
@@ -169,6 +216,20 @@ class LitNetwork(pl.LightningModule):
                 "lr_scheduler": {
                     "scheduler": scheduler,
                     "interval": "epoch"
+                }
+            }
+        elif "efficientvit" in model_name.lower():
+            print(f"Using CosineAnnealingLR for {model_name}")
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, 
+                T_max=h.num_epochs, 
+                eta_min=1e-6
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch"
                 }
             }
         else:
@@ -199,8 +260,10 @@ if __name__ == "__main__":
     # print(model_names)
 
     dataset_dir = "data/"
-    model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", "resnet18timm"]  # Add more model names as needed
-    model_name = model_names[0]
+    model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", 
+                   "swin_tiny_patch4_window7_224", "efficientvit_b1.r224_in1k",
+                   "DWConv_vit_small", "LocalDirectionalViT"]  # Add more model names as needed
+    model_name = model_names[6]
     b = 64
     width = 224
     height = 224
@@ -208,6 +271,7 @@ if __name__ == "__main__":
         torchvision.transforms.RandomResizedCrop((height, width)),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.RandomHorizontalFlip(),
+        #torchvision.transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), #added back Thomas's colorjitter
         torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
@@ -236,14 +300,19 @@ if __name__ == "__main__":
                 model_name=model_name,
                 pretrained=False,
                 freeze_backbone=False,
-                lr=1e-6, #increased from 1e-4 since learning seems slow
+                lr=1e-4, #increased from 1e-4 since learning seems slow
                 peak_lr=1e-3, # matches with lr?
-                weight_decay=0.05, #was using 0.5 which is too high which was killing learning
-                warmup_epochs=5, # passing this in shorter for pretrained
-                rampup_epochs=5, #also passing in smaller rampup
+                weight_decay=0.01, #was using 0.5 which is too high which was killing learning
+                warmup_epochs=3, # passing this in shorter for pretrained
+                rampup_epochs=7, #also passing in smaller rampup
                 num_epochs=120,
                 final_lr_fraction=0.1,
-                num_blocks_to_keep=12,
+                num_blocks_to_keep=8,
+                drop_path_rate=0.05, #adding this for stochastic depth the less the num_blocks_to_keep the smaller drop rate.
+                use_dwconv_bypass=False, # test one at a time
+                num_local_directional_blocks=0, # last blocks get local directional
+                window_size=7, # 7x7 windows - change to 4x4 because we start with 16x16
+                altGlobal=True # alternating blocks global attention vs. local
                 )
     checkpoint = pl.callbacks.ModelCheckpoint(monitor='val_acc_epoch', save_top_k=1, mode='max')
     #stop training when validation stops improving:
@@ -252,7 +321,7 @@ if __name__ == "__main__":
     #     patience = 10,
     #     mode='max'
     # )
-    logger = pl_loggers.TensorBoardLogger(save_dir="notPretrained12",name=model_name)
+    logger = pl_loggers.TensorBoardLogger(save_dir="localDirectionVit_base",name=model_name)
     #logger = pl_loggers.CSVLogger(save_dir="my_logs",name="my_csv_logs")
 
     #device = "gpu" # Use 'mps' for Mac M1 or M2 Core, 'gpu' for Windows with Nvidia GPU, or 'cpu' for Windows without Nvidia GPU
