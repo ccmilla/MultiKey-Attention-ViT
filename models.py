@@ -780,9 +780,9 @@ def select_image_model(
                                   use_dwconv_bypass=use_dwconv_bypass #pass through
                                   )
     elif model_name == "DWConv_vit_small":
-        # using depthwise convolution without custom vit
+        # using depthwise convolution standalone
         model = StandardViTWithDWConv(
-                num_blocks_to_keep=num_blocks_to_keep #adding this for overfitting
+                num_blocks_to_keep=num_blocks_to_keep #layer modifications
             )
     elif model_name == "LocalDirectionalViT":
         model = LocalDirectionalViT(

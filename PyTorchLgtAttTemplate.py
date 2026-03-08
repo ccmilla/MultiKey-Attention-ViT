@@ -263,7 +263,7 @@ if __name__ == "__main__":
     model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", 
                    "swin_tiny_patch4_window7_224", "efficientvit_b1.r224_in1k",
                    "DWConv_vit_small", "LocalDirectionalViT"]  # Add more model names as needed
-    model_name = model_names[6]
+    model_name = model_names[1]
     b = 64
     width = 224
     height = 224
@@ -307,10 +307,10 @@ if __name__ == "__main__":
                 rampup_epochs=7, #also passing in smaller rampup
                 num_epochs=120,
                 final_lr_fraction=0.1,
-                num_blocks_to_keep=8,
+                num_blocks_to_keep=12,
                 drop_path_rate=0.05, #adding this for stochastic depth the less the num_blocks_to_keep the smaller drop rate.
-                use_dwconv_bypass=False, # test one at a time
-                num_local_directional_blocks=0, # last blocks get local directional
+                use_dwconv_bypass=True, # test one at a time
+                num_local_directional_blocks=0, # last blocks get local directional 0 means alternating
                 window_size=7, # 7x7 windows - change to 4x4 because we start with 16x16
                 altGlobal=True # alternating blocks global attention vs. local
                 )
