@@ -263,7 +263,7 @@ if __name__ == "__main__":
     model_names = ["ViTLayerReduction", "vit_small_patch16_224", "resnet18tv", 
                    "swin_tiny_patch4_window7_224", "efficientvit_b1.r224_in1k",
                    "DWConv_vit_small", "LocalDirectionalViT"]  # Add more model names as needed
-    model_name = model_names[1]
+    model_name = model_names[5]
     b = 64
     width = 224
     height = 224

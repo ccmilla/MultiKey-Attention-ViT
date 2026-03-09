@@ -403,11 +403,11 @@ class ViTLayerReduction(nn.Module):
 #=============
 class StandardViTWithDWConv(nn.Module):
     #Standard vit-smallk with DWConv bypass added (no custom attention)
-    def __init__(self, num_blocks_to_keep):
+    def __init__(self, num_blocks_to_keep, num_classes):
         super().__init__()
 
         #Load standard vit_small
-        full_model = timm.create_model("vit_small_patch16_224")
+        full_model = timm.create_model("vit_small_patch16_224", num_classes)
 
         self.patch_embed = full_model.patch_embed
         self.cls_token = full_model.cls_token
@@ -753,7 +753,6 @@ def select_image_model(
     if model_name == "vit_small_patch16_224":
         model = timm.create_model("vit_small_patch16_224", 
                                     pretrained=pretrained,
-                                    num_blocks_to_keep=num_blocks_to_keep, 
                                     num_classes=n_classes)
         #reducing the number of blocks that will hopefully help with overfitting
         model.blocks = nn.Sequential(*model.blocks[:num_blocks_to_keep])
@@ -782,6 +781,7 @@ def select_image_model(
     elif model_name == "DWConv_vit_small":
         # using depthwise convolution standalone
         model = StandardViTWithDWConv(
+                num_classes=n_classes,
                 num_blocks_to_keep=num_blocks_to_keep #layer modifications
             )
     elif model_name == "LocalDirectionalViT":
